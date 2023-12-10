@@ -1,0 +1,666 @@
+---
+title: "trade"
+output: html_document
+date: "2023-12-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(statnet)
+library(stats)
+library(ergm)
+library(igraph)
+```
+
+```{r}
+# making the distance network
+dist <- read.csv("dist.csv",stringsAsFactors = FALSE)
+#dist$log_dist <- log(dist$dist)
+el_dist <- dist[dist[,1] != dist[,2], ] # removing self loops
+
+#el_dist$concat <- apply(el_dist[, c("Ego", "Alter")], 1, function(x) paste(sort(x), collapse = "-"))
+
+# Removing duplicates 
+#undirected_dist <- el_dist[!duplicated(el_dist$concat), ]
+
+dis_net <- network(el_dist, directed = TRUE, matrix.type = "edgelist",loops = FALSE)
+set.edge.value(dis_net, "dist", el_dist$dist)
+#set.edge.value(dis_net, "log_dist", el_dist$log_dist)
+dis_net
+```
+```{r}
+#class(dis_net$dist)
+#summary(dis_net)
+#class(dis_net %e% "dist")
+```
+
+
+
+```{r}
+# making the colonization network
+col <- read.csv("colonization_el.csv",stringsAsFactors = FALSE)
+#dist$log_dist <- log(dist$dist)
+col <- col[col[,1] != col[,2], ] # removing self loops
+#col_col$concat <- apply(col[, c("Ego", "Alter")], 1, function(x) paste(sort(x), collapse = "-"))
+# removing duplicates 
+#undirected_dist <- el_dist[!duplicated(el_dist$concat), ]
+
+col_net <- network(col, directed = TRUE, matrix.type = "edgelist",loops = FALSE)
+col_net
+set.edge.value(col_net, "colonization", col$colonization)
+col_net
+```
+
+# Making continguity netword
+
+
+```{r}
+c <- read.csv("cont.csv",stringsAsFactors = FALSE)
+#c[duplicated(c), ]
+```
+## removing duoplicated rows
+```{r}
+con <- unique(c)
+```
+
+```{r}
+country_att <- read.csv("common.csv",header = TRUE, as.is = TRUE, stringsAsFactors = FALSE)
+```
+
+
+```{r}
+library(dplyr)
+```
+
+# removing the rows with same coljumns and lowest third column value
+
+```{r}
+result <- con %>%
+  group_by(Ego, Alter) %>%
+  filter(conttype == min(conttype)) %>%
+  ungroup()
+```
+# only keeping the countries those are in countries list
+
+
+```{r}
+countries <- read.csv("countries.csv",stringsAsFactors = FALSE)
+result1 <- result[result$Ego %in% countries$country_iso3 | result$Alter %in% countries$country_iso3, ]
+```
+
+```{r}
+result1[duplicated(result1), ]
+```
+
+```{r}
+length(unique(result1$Ego))
+```
+
+
+
+```{r}
+co <- network(result1, directed = FALSE, matrix.type = "edgelist", vertex.attr=country_att,  vertex.attrnames=colnames(country_att))
+set.edge.value(co, "conttype", result1$conttype)
+```
+
+```{r}
+co
+```
+
+
+
+
+
+```{r}
+#plot(co, displaylabels=T, mode="circle")
+```
+
+
+
+```{r}
+#Reference : https://cran.r-project.org/web/packages/intergraph/vignettes/howto.html#network-igraph
+library(intergraph)
+g <- asIgraph(co)
+```
+
+
+
+```{r}
+summary(g)
+mean(degree(g))
+graph.density(g)
+diameter(g)
+
+
+reciprocity(g)
+transitivity(g)
+average.path.length(g)
+```
+```{r}
+i_deg <- degree(g, mode="in") 
+which(i_deg==max(i_deg))
+```
+
+```{r}
+library(viridis)
+unique_continents <- unique(country_att$continent)
+colors <- magma(length(unique_continents))
+node_colors <- colors[match(country_att$continent, unique_continents)]
+```
+
+```{r}
+options(repr.plot.width = 15, repr.plot.height = 10)
+# plotting the network with node colors based on coreness
+plot(g, 
+     vertex.size = strength(g, mode = "in")/2, #reducing the node size 
+     vertex.color = node_colors, 
+     vertex.label = V(g)$Ego,
+     vertex.label.cex = 0.4,
+     edge.arrow.size = 0.1, 
+     edge.curved=TRUE, 
+     layout = as.matrix(cbind(country_att$Longitude.average.,country_att$Latitude.average.)), asp = 0.5,
+     edge.width = scales::rescale(E(g)$conttype, to = c(-1,2)),
+     main = "Continguity Network")
+
+```
+
+
+# Service trade network
+
+```{r}
+s <- read.csv("service_2021.csv",stringsAsFactors = FALSE)
+#only keeping the total services
+filtered_s <- subset(s, SERVICE == "S")
+filtered_s[duplicated(filtered_s), ]
+filt <- unique(filtered_s)
+```
+
+
+```{r}
+#s <- asIgraph(service)
+
+#summary(s)
+#mean(degree(s))
+#graph.density(s)
+#diameter(s)
+
+
+#reciprocity(s)
+#transitivity(s)
+#average.path.length(s)
+#assortativity.nominal(s, as.factor(V(s)$continent), directed = T)
+#assortativity(top_g, V(top_g)$GDP.per.capita, directed = T)
+
+#assortativity.nominal(s, as.factor(V(s)$landlocked), directed = T)
+
+#assortativity.nominal(s, as.factor(V(s)$langoff_1), directed = T)
+```
+
+# Service trade attributes
+```{r}
+
+# only keeping the countries those are in common 
+#com <- read.csv("service_att_2021_filt.csv",stringsAsFactors = FALSE)
+```
+
+```{r}
+node_attribute <- read.csv("service_attribute_2021.csv", header = TRUE, as.is = TRUE, stringsAsFactors= FALSE)
+```
+
+
+```{r}
+#install.packages("imputeTS")
+#library(imputeTS)
+# mean imputation
+#com$GDP <- na.mean(com$GDP)
+#com$FDI_net_inflows <- na.mean(com$FDI_net_inflows)
+#com$Inflation_rate <- na.mean(com$Inflation_rate)
+#com$GDP_per_capita <- na.mean(com$GDP_per_capita)
+#class(com$GDP)
+#com$GDP <- as.numeric(com$GDP)
+#com$Inflation_rate <- as.numeric(com$Inflation_rate)
+#com$GDP_per_capita <- as.numeric(com$GDP_per_capita)
+#com$FDI_net_inflows <- as.numeric(com$FDI_net_inflows)
+#com$area <- as.numeric(com$area)
+#sum(is.na(com$GDP))
+#com$log_gdp <- log10(com$GDP)
+#rm(filtered_s)
+```
+
+
+```{r}
+filt <- filt[filt$Ego %in% node_attribute$Ego_x, ]
+filt <- filt[filt$Alter %in% node_attribute$Ego_x, ]
+```
+
+
+
+```{r}
+length(unique(filt$Ego))
+length(unique(filt$Alter))
+length(unique(node_attribute$Ego_x))
+length(unique(node_attribute$Ego_x))
+```
+```{r}
+egos_in_filt <- unique(filt$Ego)
+alter_in_filt <- unique(filt$Alter)
+egos_in_countries <- unique(node_attribute$Ego_x)
+setdiff(egos_in_filt, egos_in_countries)
+```
+
+```{r}
+#setdiff(node_attribute$Ego_x, egos_in_filt)
+```
+```{r}
+#setdiff(alter_in_filt, attribute$Ego_x)
+```
+
+```{r}
+# Filter rows where Alter is not in the specified values
+#filtered_nodes <- filt[!(filt$Alter %in% c("ZAF", "YEM", "ZMB", "ZWE")), ]
+
+# Print or inspect the filtered nodes
+#length(unique(filtered_nodes$Ego))
+#length(unique(filtered_nodes$Alter))
+```
+
+```{r}
+#write.csv(filtered_nodes, 'service_filt_2021.csv')
+```
+
+
+```{r}
+attribute <- read.csv("service_att_2021_filt.csv", header = TRUE, as.is = TRUE, stringsAsFactors= FALSE)
+```
+
+```{r}
+se <- graph.data.frame(d = filtered_nodes, vertices = attribute, directed = TRUE)
+edge_weights <- filtered_nodes$Value
+E(se)$weight <- edge_weights
+```
+
+```{r}
+top <- delete.edges(se, which(E(se)$Value < quantile(E(se)$Value, prob = 0.75, na.rm = TRUE)))
+```
+
+```{r}
+summary(top)
+mean(degree(top))
+graph.density(top)
+diameter(top)
+reciprocity(top)
+transitivity(top)
+average.path.length(top)
+assortativity.nominal(top, as.factor(V(top)$GDP_per_capita), directed = T)
+assortativity(top, V(top)$GDP_per_capita, directed = T)
+assortativity.nominal(top, as.factor(V(top)$landlocked), directed = T)
+assortativity.nominal(top, as.factor(V(top)$langoff_1), directed = T)
+```
+```{r}
+top_5 <- delete.edges(se, which(E(se)$Value < quantile(E(se)$Value, prob = 0.50, na.rm = TRUE)))
+```
+
+```{r}
+top_5 
+```
+
+
+```{r}
+i_deg <- degree(top, mode="in") 
+which(i_deg==max(i_deg))
+o_deg <- degree(top, mode="out")
+which(o_deg==max(i_deg))
+bet <- betweenness(top)
+which(bet==max(bet))
+clo <- closeness(top, mode='all')
+clo <- replace(clo, is.na(clo), 0)
+which(clo==max(clo))
+eig <- evcent(top)$vector
+which(eig==max(eig))
+pr <- page.rank(top)$vecto
+which(pr==max(pr))
+```
+```{r}
+which(i_deg==min(i_deg))
+which(o_deg==min(o_deg))
+which(bet==min(bet))
+which(clo==min(clo))
+which(eig==min(eig))
+which(pr==min(pr))
+```
+
+
+```{r}
+library(viridis)
+unique_continents <- unique(attribute$continent)
+colors <- rainbow(length(unique_continents))
+node_colors <- colors[match(attribute$continent, unique_continents)]
+```
+
+
+```{r}
+options(repr.plot.width = 15, repr.plot.height = 10)
+# plotting the network with node colors based on coreness
+plot(top, 
+     vertex.size = degree(top, mode="in")*0.08, #reducing the node size 
+     vertex.color = node_colors, 
+     vertex.label = V(top)$Country,
+     vertex.label.cex = 0.4,
+     edge.arrow.size = 0.1, 
+     edge.curved=TRUE, 
+     layout = as.matrix(cbind(attribute$Longitude.average.,attribute$Latitude.average.)), asp = -1,
+     #edge.width = scales::rescale(E(top)$Value, to = c(-2,2)),
+     edge.width = scales::rescale(E(top)$Value, to = c(-2, 1)), # Adjust the edge width
+     main = "Service Trade Network")
+
+legend("topright", 
+       legend=unique(attribute$continent),
+       col = node_colors,
+       pch = 16,
+       title = "Continents")
+```
+
+```{r}
+# calculating the number of reciprocal ties for each node
+reciprocal_tie_count <- numeric(length(V(top)))
+
+for (i in 1:length(V(top))) {
+  in_deg <- degree(top, v = i, mode = "in")
+  out_deg <- degree(top, v = i, mode = "out")
+  reciprocal_tie_count[i] <- min(in_deg, out_deg)
+}
+# adding the reciprocal tie counts column to the node attribute data set
+attribute$reciprocal_ties <- reciprocal_tie_count
+```
+
+
+```{r}
+i_deg[attribute$Ego_x == "BGD"]
+o_deg[attribute$Ego_x == "BGD"]
+bet[attribute$Ego_x == "BGD"]
+clo[attribute$Ego_x == "BGD"]
+eig[attribute$Ego_x == "BGD"]
+pr[attribute$Ego_x == "BGD"]
+attribute$reciprocal_ties[attribute$Ego_x == "BGD"]
+```
+```{r}
+mean(i_deg[attribute$Ego_x])
+max(i_deg[attribute$Ego_x])
+min(i_deg[attribute$Ego_x])
+```
+```{r}
+mean(o_deg[attribute$Ego_x])
+max(o_deg[attribute$Ego_x])
+min(o_deg[attribute$Ego_x])
+```
+```{r}
+mean(bet[attribute$Ego_x])
+max(bet[attribute$Ego_x])
+min(bet[attribute$Ego_x])
+```
+```{r}
+mean(clo[attribute$Ego_x])
+max(clo[attribute$Ego_x])
+min(clo[attribute$Ego_x])
+```
+
+```{r}
+mean(bet[attribute$Ego_x])
+max(bet[attribute$Ego_x])
+min(bet[attribute$Ego_x])
+```
+
+```{r}
+mean(eig[attribute$Ego_x])
+max(eig[attribute$Ego_x])
+min(eig[attribute$Ego_x])
+
+pr
+```
+```{r}
+mean(pr[attribute$Ego_x])
+max(pr[attribute$Ego_x])
+min(pr[attribute$Ego_x])
+```
+
+## Community Detection
+
+```{r}
+#se_und <- graph.data.frame(d = filtered_nodes, vertices = attribute, directed = FALSE)
+#edge_weights <- filtered_nodes$Value
+#E(se_und)$weight <- edge_weights
+#top_und <- delete.edges(se_und, which(E(se)$Value < quantile(E(se)$Value, prob = 0.75, na.rm = TRUE)))
+```
+
+```{r}
+# https://igraph.org/r/doc/cluster_louvain.html
+#communities <- cluster_louvain(top_und, weights = V(top_und)$Value, resolution = 1)
+#length(unique(communities))
+#membership_vector <- membership(communities)
+#table(membership_vector)
+```
+
+
+
+```{r}
+library(dplyr)
+# Extract node names
+node_names <- V(top)$Ego_x
+
+# Identify neighbors of "BGD"
+bgd_neighbors <- names(neighbors(top, "BGD"))
+
+# Create a dummy variable indicating whether each node is connected to "BGD"
+attribute <- attribute %>%
+  mutate(con_BGD = as.integer(node_names %in% bgd_neighbors))
+```
+
+
+
+```{r}
+table(attribute$con_BGD)
+```
+
+```{r}
+custom_colors <- c("0" = "grey", "1" = "blue")  # Adjust colors as needed
+node_c <- custom_colors[as.character(attribute$con_BGD)]
+
+options(repr.plot.width = 15, repr.plot.height = 10)
+# plotting the network with node colors based on coreness
+plot(top, 
+     vertex.size = 6, #reducing the node size 
+     vertex.color = node_c, 
+     vertex.label = V(top)$Country,
+     vertex.label.cex = 0.5,
+     edge.arrow.size = 0.1, 
+     edge.curved=TRUE, 
+     layout = as.matrix(cbind(attribute$Longitude.average.,attribute$Latitude.average.)), asp = -1,
+     #edge.width = scales::rescale(E(top)$Value, to = c(-2,2)),
+     edge.width = scales::rescale(E(top)$Value, to = c(-5, 1)), # Adjust the edge width
+     main = "Service Trade Network")
+
+legend("topright", 
+       legend=unique(attribute$con_BGD),
+       col = node_c,
+       pch = 16,
+       title = "Connected to Bangladesh",
+       cex=0.8)
+```
+
+```{r}
+# Filter out rows with non-finite values in Longitude.average. or Latitude.average.
+#valid_coords <- complete.cases(attribute$Longitude.average., attribute$Latitude.average.)
+#layout_matrix <- cbind(attribute$Longitude.average.[valid_coords], attribute$Latitude.average.[valid_coords])
+library(scales)
+
+# creating a vector of vertex sizes based on 'A' column values
+node_size1 <- rescale(attribute$GDP_per_capita, c(0.5, 9)) + 2
+
+# creating a vector of colors for all nodes based on the altruist column
+node_color <- ifelse(attribute$con_BGD == 0, "grey", "blue")
+
+plot(top, 
+     vertex.size = node_size1,  # adjust the scaling factor as needed
+     vertex.color = node_color, 
+     vertex.label = V(top)$Country,
+     vertex.label.cex = 0.4,
+     edge.arrow.size = 0.1, 
+     edge.curved = TRUE, 
+     layout = as.matrix(layout_matrix), asp = -1,
+     main = "Total trade in services network of Bangladesh")
+
+legend("bottomleft",
+       legend = c("Trades with Bangladesh","Others"),
+       pch = 19,
+       col = c("blue", "grey"),  
+       cex = 0.8)
+```
+```{r}
+library(scales)
+
+# Assuming 'E(top)$Value' contains the edge weights
+top_edges <- get.data.frame(top, what = "edges")
+top_edges <- top_edges[order(-top_edges$Value), ]
+
+# Select the top 10% of edges
+top_percentage <- 0.1
+top_edges <- top_edges[1:round(nrow(top_edges) * top_percentage), ]
+
+# Plotting the network with only the selected edges
+plot(top, 
+     vertex.size = node_size1,  
+     vertex.color = node_color, 
+     vertex.label = V(top)$Country,
+     vertex.label.cex = 0.4,
+     edge.arrow.size = 0.1, 
+     edge.curved = TRUE,
+     edge.color = ifelse(E(top)$Value %in% top_edges$Value, "blue", "grey"),  # Highlight top edges in blue
+     layout = as.matrix(layout_matrix), asp = -1,
+     main = "Total trade in services network of Bangladesh")
+
+# Legend
+legend("bottomleft",
+       legend = c("Trades with Bangladesh", "Others"),
+       pch = 19,
+       col = c("blue", "grey"),  
+       cex = 0.8)
+
+```
+
+```{r}
+ V(top)$con_BGD<- attribute$con_BGD
+```
+
+
+
+```{r}
+snet <- intergraph::asNetwork(top)
+```
+
+```{r}
+#class(filtered_s$Ego)
+#class(dis_net$dist)
+```
+
+
+```{r}
+m1 <- ergm(snet ~ 
+          edges +
+          mutual +
+          #triangles +
+          nodecov("log_gdp") + # world bank
+          absdiff("log_gdp") + 
+          nodecov("Inflation_rate") + # world bank
+          absdiff("Inflation_rate") + # world bank
+          nodecov("RTA") +
+          nodecov("area") + # world bank
+          absdiff("area") +
+          nodecov("FDI_net_inflows") + # world bank
+          absdiff("FDI_net_inflows") + 
+          nodecov("Net_barter_terms_of_trade_index") + # world bank
+          absdiff("Net_barter_terms_of_trade_index") + 
+          nodecov("GDP_per_capita_growth") + # world bank
+          absdiff("GDP_per_capita_growth") +
+          nodecov("Political_Stability") +
+          nodematch("landlocked") +
+          nodematch("langoff_1") +
+          nodematch("continent") +
+          #nodematch("con_BGD") )
+          edgecov(dis_net, "dist") +
+          edgecov(col_net, "colonization") +
+          edgecov(co, "conttype"))
+          #, control = control.ergm(MCMLE.maxit = 40, MCMC.interval = 20000))# world bank
+          
+```
+
+```{r}
+summary(m1)
+```
+
+## Ploting the service trade network
+
+
+```{r}
+#library(intergraph)
+#s <- asIgraph(service)
+```
+
+
+
+```{r}
+#system("vm_stat")
+#system("sysctl -n hw.memsize")
+```
+
+
+
+```{r}
+summary(m2)
+```
+
+
+```{r}
+set.seed(240121)
+
+m2 <- ergm(service ~ edges +
+            mutual +
+            triangles +
+            nodecov("log_gdp") + # world bank
+            absdiff("log_gdp") + # world bank
+            nodecov("Inflation_rate") + # world bank
+            absdiff("Inflation_rate") + # world bank
+            nodecov("GDP_per_capita") + # world bank
+            absdiff("GDP_per_capita") + # world bank
+            nodematch("landlocked") +   #http://www.cepii.fr/CEPII/en/bdd_modele/download.asp?id=6
+            nodematch("langoff_1") + # http://www.cepii.fr/CEPII/en/bdd_modele/download.asp?id=6
+            nodematch("RTA") +
+            nodecov("area") + # world bank
+            absdiff("area") + # world bank
+            nodecov("FDI_net_inflows") + # world bank
+            absdiff("FDI_net_inflows") + # world bank
+            nodematch("continent") +
+            edgecov(col_net) +  #"colonization"
+            edgecov(dis_net) +  #distance
+            edgecov(co)   #"continguity"
+                )
+
+```
+
+
+
+
+
+```{r}
+memory.size(max = FALSE)  # Check current memory usage
+
+```
+
+```{r}
+subset_service <- service[sample(nrow(service), 100), ]  # Adjust the sample size
+#m1_subset <- ergm(formula, data = subset_service)
+
+```
+
